@@ -38,6 +38,7 @@ function LandingApp() {
   const [signupSkills, setSignupSkills] = useState('')
   const [signupLocation, setSignupLocation] = useState('')
   const [signupGoal, setSignupGoal] = useState('')
+  const [signupGithub, setSignupGithub] = useState('')
   const [signupSocial, setSignupSocial] = useState('')
   const [signupAvailability, setSignupAvailability] = useState('')
   const [signupOpen, setSignupOpen] = useState(true)
@@ -301,13 +302,13 @@ function LandingApp() {
             </div>
             <div className="flex gap-3">
               <a
-                href="/requests.html"
+                href="#/recruiter/leaderboard"
                 className="px-4 py-2 rounded-full border border-outline-variant/30 text-sm font-bold text-white/80 hover:bg-primary-container hover:text-on-primary transition-all"
               >
                 All projects
               </a>
               <a
-                href="/collaboration.html"
+                href="#/recruiter/collaborator"
                 className="px-4 py-2 rounded-full bg-primary-container text-on-primary font-headline font-bold uppercase tracking-wide hover:bg-primary transition-all"
               >
                 Open a room
@@ -385,7 +386,7 @@ function LandingApp() {
                           Apply for
                         </span>
                         <a
-                          href="/requests.html"
+                          href="#/recruiter/leaderboard"
                           className="text-lg font-black text-primary-container underline decoration-primary-container/60 decoration-2 underline-offset-4"
                         >
                           {role}
@@ -412,7 +413,7 @@ function LandingApp() {
                   </div>
                   <div className="flex items-center justify-between px-6 py-4 border-t border-outline-variant/10 text-white/60 text-sm">
                     <a
-                      href="/collaboration.html"
+                      href="#/recruiter/collaborator"
                       className="flex items-center gap-2 hover:text-primary-container transition-colors"
                     >
                       <span className="material-symbols-outlined text-base">
@@ -421,7 +422,7 @@ function LandingApp() {
                       Open collab room
                     </a>
                     <a
-                      href="/requests.html"
+                      href="#/recruiter/leaderboard"
                       className="flex items-center justify-center w-8 h-8 rounded-full border border-outline-variant/30 hover:border-primary-container hover:text-primary-container transition-colors"
                     >
                       <span className="material-symbols-outlined text-sm">
@@ -586,9 +587,9 @@ function LandingApp() {
                     ? 'bg-primary-container text-on-primary border-transparent'
                     : 'bg-surface-container hover:bg-primary-container hover:text-on-primary'
                 }`}
-                onClick={() =>
-                  (window.location.href = `/discover.html#city-${city.toLowerCase()}`)
-                }
+                onClick={() => {
+                  window.location.hash = '#/recruiter/leaderboard'
+                }}
               >
                 {city}
               </span>
@@ -598,7 +599,7 @@ function LandingApp() {
             <p className="text-on-surface-variant mb-4">Do not see your city?</p>
             <a
               className="text-primary-container font-bold hover:underline"
-              href="/discover.html"
+              href="#/recruiter"
             >
               Join the waitlist →
             </a>
@@ -849,6 +850,7 @@ function LandingApp() {
                       location: signupLocation,
                       build_goal: signupGoal,
                       open_to_collab: signupOpen,
+                      github_account_url: signupGithub,
                       social: signupSocial,
                       availability: signupAvailability
                     })
@@ -934,6 +936,16 @@ function LandingApp() {
                   onChange={(e) => setSignupAvailability(e.target.value)}
                   className="w-full bg-surface-container text-white border border-outline-variant/40 rounded px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-container"
                   placeholder="Weeknights, Weekends, 10 hrs/week"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm text-white/70">GitHub account URL</label>
+                <input
+                  type="url"
+                  value={signupGithub}
+                  onChange={(e) => setSignupGithub(e.target.value)}
+                  className="w-full bg-surface-container text-white border border-outline-variant/40 rounded px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-container"
+                  placeholder="https://github.com/your-handle"
                 />
               </div>
               <div className="space-y-2">
@@ -1069,7 +1081,7 @@ function FooterColumn({ title, links }) {
           <li key={link}>
             <a
               className="hover:text-white transition-colors"
-              href="/discover.html"
+              href="#/recruiter/leaderboard"
             >
               {link}
             </a>
