@@ -3,17 +3,20 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");
-const { registerUser, matchUsers ,getLeaderboard} = require("./controllers/matchController");
+const {
+  registerUser,
+  matchUsers,
+  getLeaderboard,
+  searchProjects,
+  submitProject,
+  createCollabProject,
+  offerHelpOnCollabProject,
+} = require("./controllers/matchController");
 
 const app = express();
 
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
-
-
-// app.get('/',()=>{
-//   console.log("Hello")
-// })
 
 app.get("/api/health", (req, res) => {
   res.status(200).json({
@@ -26,7 +29,10 @@ app.get("/api/health", (req, res) => {
 app.post("/api/users/register", registerUser);
 app.post("/api/match", matchUsers);
 app.get("/api/leaderboard", getLeaderboard);
-
+app.get("/api/projects/search", searchProjects);
+app.post("/api/projects/submit", submitProject);
+app.post("/api/collab-projects", createCollabProject);
+app.post("/api/collab-projects/:id/help", offerHelpOnCollabProject);
 
 app.use((err, req, res, next) => {
   console.error(err);
@@ -45,7 +51,6 @@ const startServer = async () => {
     console.error("Missing MONGODB_URI in environment.");
     process.exit(1);
   }
-
   try {
     await mongoose.connect(MONGODB_URI);
     console.log("MongoDB connected.");
