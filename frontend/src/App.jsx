@@ -103,22 +103,13 @@ function LandingApp() {
             Sign in
           </button>
           <button
-            className="text-white/70 font-medium hover:text-white transition-all"
+            className="bg-primary-container text-on-primary px-6 py-2.5 rounded font-headline font-bold uppercase tracking-wide hover:bg-primary transition-all active:scale-95"
             type="button"
             onClick={() => {
               window.location.hash = '#/recruiter'
             }}
           >
-            Recruiter UI
-          </button>
-          <button
-            className="bg-white text-[#131313] px-6 py-2.5 rounded font-headline font-bold uppercase tracking-wide hover:opacity-90 transition-all active:scale-95"
-            type="button"
-            onClick={() => {
-              window.location.href = '/discover.html'
-            }}
-          >
-            Launch app
+            Launch App
           </button>
         </div>
       </nav>
@@ -203,12 +194,6 @@ function LandingApp() {
             >
               Create account
             </button>
-            <a
-              className="text-sm text-primary-container hover:underline"
-              href="/discover.html"
-            >
-              Go to app →
-            </a>
           </div>
           {status.place === 'hero' && status.state !== 'idle' && (
             <p
@@ -1012,12 +997,6 @@ function LandingApp() {
               >
                 Already have an account?
               </button>
-              <a
-                className="hover:text-primary-container transition-colors"
-                href="/discover.html"
-              >
-                Go to app →
-              </a>
             </div>
           </div>
         </div>
