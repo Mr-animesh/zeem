@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Buildmate | Project Room - EcoTrack</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&amp;family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "tertiary-fixed-dim": "#e7b6f3",
+                        "on-secondary-container": "#bab8b7",
+                        "on-secondary": "#313030",
+                        "surface-dim": "#131313",
+                        "background": "#131313",
+                        "inverse-on-surface": "#303030",
+                        "on-background": "#e2e2e2",
+                        "on-surface-variant": "#c2cab0",
+                        "on-primary": "#213600",
+                        "on-secondary-fixed": "#1c1b1b",
+                        "inverse-surface": "#e2e2e2",
+                        "surface": "#131313",
+                        "outline": "#8c947c",
+                        "surface-container": "#1f1f1f",
+                        "secondary-fixed": "#e5e2e1",
+                        "primary-fixed-dim": "#98da27",
+                        "primary-container": "#a3e635",
+                        "on-primary-container": "#416400",
+                        "surface-container-lowest": "#0e0e0e",
+                        "error-container": "#93000a",
+                        "on-error": "#690005",
+                        "secondary-fixed-dim": "#c8c6c5",
+                        "surface-variant": "#353535",
+                        "on-primary-fixed": "#121f00",
+                        "surface-container-low": "#1b1b1b",
+                        "on-tertiary-fixed": "#2f093d",
+                        "inverse-primary": "#446900",
+                        "secondary": "#c8c6c5",
+                        "on-tertiary-fixed-variant": "#5e376b",
+                        "surface-container-highest": "#353535",
+                        "on-primary-fixed-variant": "#334f00",
+                        "primary": "#ccff80",
+                        "surface-container-high": "#2a2a2a",
+                        "on-error-container": "#ffdad6",
+                        "tertiary-container": "#f3c1ff",
+                        "outline-variant": "#424936",
+                        "on-secondary-fixed-variant": "#474646",
+                        "surface-bright": "#393939",
+                        "secondary-container": "#4a4949",
+                        "tertiary-fixed": "#fad7ff",
+                        "on-tertiary": "#462153",
+                        "error": "#ffb4ab",
+                        "primary-fixed": "#b2f746",
+                        "on-tertiary-container": "#734b80",
+                        "surface-tint": "#98da27",
+                        "on-surface": "#e2e2e2",
+                        "tertiary": "#fee7ff"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    fontFamily: {
+                        "headline": ["Syne", "sans-serif"],
+                        "body": ["DM Sans", "sans-serif"],
+                        "label": ["DM Sans", "sans-serif"]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'DM Sans', sans-serif; background-color: #131313; color: #e2e2e2; }
+        .font-syne { font-family: 'Syne', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #131313; }
+        ::-webkit-scrollbar-thumb { background: #353535; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #4a4a4a; }
+    </style>
+</head>
+<body class="bg-[#131313] text-on-surface font-body">
+  <header class="sticky top-0 z-40 bg-[#131313]/85 backdrop-blur-md border-b border-outline-variant/20">
+    <nav class="flex items-center justify-between w-full px-6 py-4 max-w-6xl mx-auto">
+      <div class="flex items-center gap-4">
+        <a class="p-2 hover:bg-surface-container-high rounded-full transition-all duration-200" href="/">
+          <span class="material-symbols-outlined text-on-surface">arrow_back</span>
+        </a>
+        <div>
+          <p class="text-[11px] uppercase tracking-[0.25em] text-primary-container font-bold">Swap hub</p>
+          <h1 class="text-2xl font-headline font-black text-white tracking-tight">Post a swap & earn tokens</h1>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <a class="p-2 rounded-full hover:bg-surface-container-high transition-all text-white/70 hover:text-[#A3E635]" href="/requests.html" aria-label="Projects">
+          <span class="material-symbols-outlined">deployed_code</span>
+        </a>
+        <a class="p-2 rounded-full hover:bg-surface-container-high transition-all text-white/70 hover:text-[#A3E635]" href="/profile.html" aria-label="Profile">
+          <span class="material-symbols-outlined">account_circle</span>
+        </a>
+      </div>
+    </nav>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-6 py-10 space-y-10">
+    <section class="bg-surface-container-high rounded-3xl border border-outline-variant/20 p-6 md:p-10 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+      <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-6 mb-8">
+        <div class="space-y-2">
+          <p class="text-sm uppercase tracking-[0.35em] text-primary-container font-headline">Create swap</p>
+          <h2 class="text-3xl font-headline font-black text-white tracking-tight">
+            Tell builders what you need and what you offer
+          </h2>
+          <p class="text-on-surface-variant">
+            Each swap post gives you tokens. Be specific so the right partner applies fast.
+          </p>
+        </div>
+        <div class="flex items-center gap-2 bg-primary/10 text-primary px-4 py-2 rounded-full text-sm font-bold uppercase tracking-tight">
+          <span class="material-symbols-outlined text-sm">local_atm</span>
+          Earn 10 tokens / post
+        </div>
+      </div>
+
+      <form id="swap-form" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="space-y-2">
+          <label class="text-sm text-white/70">Email</label>
+          <input required type="email" name="email" class="w-full bg-surface text-white border border-outline-variant/40 rounded px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-container" placeholder="you@university.edu"/>
+        </div>
+        <div class="space-y-2">
+          <label class="text-sm text-white/70">Title</label>
+          <input required name="title" class="w-full bg-surface text-white border border-outline-variant/40 rounded px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-container" placeholder="Need UI polish for fintech dashboard"/>
+        </div>
+        <div class="space-y-2">
+          <label class="text-sm text-white/70">What you need</label>
+          <textarea required rows="2" name="need" class="w-full bg-surface text-white border border-outline-variant/40 rounded px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-container" placeholder="Looking for UX designer to refine flows"></textarea>
+        </div>
+        <div class="space-y-2">
+          <label class="text-sm text-white/70">What you offer</label>
+          <textarea required rows="2" name="offer" class="w-full bg-surface text-white border border-outline-variant/40 rounded px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-container" placeholder="React + Node dev support, integrations, testing"></textarea>
+        </div>
+        <div class="space-y-2">
+          <label class="text-sm text-white/70">Availability</label>
+          <input name="availability" class="w-full bg-surface text-white border border-outline-variant/40 rounded px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-container" placeholder="Weeknights / Weekends, 6-8 hrs"/>
+        </div>
+        <div class="flex items-end">
+          <button type="submit" class="w-full bg-primary-container text-on-primary font-headline font-black px-6 py-4 rounded uppercase tracking-widest hover:bg-primary transition-all disabled:opacity-60" id="swap-submit">
+            Post & earn tokens
+          </button>
+        </div>
+      </form>
+      <p id="swap-status" class="mt-4 text-sm text-primary-container hidden"></p>
+    </section>
+
+    <section class="space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm uppercase tracking-[0.35em] text-primary-container font-headline">Recent swaps</p>
+          <h3 class="text-2xl font-headline font-black text-white tracking-tight">Latest posts from you</h3>
+        </div>
+        <button id="refresh-swaps" class="text-sm text-primary-container hover:underline">Refresh</button>
+      </div>
+      <div id="swap-list" class="grid gap-4 md:grid-cols-2"></div>
+      <p id="swap-empty" class="text-on-surface-variant text-sm">No swaps yet. Post one to get started.</p>
+    </section>
+  </main>
+
+  <script>
+    const API_BASE = 'http://localhost:4000';
+    const form = document.getElementById('swap-form');
+    const statusEl = document.getElementById('swap-status');
+    const listEl = document.getElementById('swap-list');
+    const emptyEl = document.getElementById('swap-empty');
+    const refreshBtn = document.getElementById('refresh-swaps');
+    let lastEmail = '';
+
+    function setStatus(text, ok = true) {
+      statusEl.textContent = text;
+      statusEl.classList.toggle('hidden', false);
+      statusEl.classList.toggle('text-primary-container', ok);
+      statusEl.classList.toggle('text-red-400', !ok);
+    }
+
+    async function loadSwaps(email) {
+      if (!email) return;
+      try {
+        const res = await fetch(`${API_BASE}/api/swaps?email=${encodeURIComponent(email)}`);
+        const data = await res.json();
+        renderSwaps(data.swaps || []);
+      } catch (e) {
+        setStatus('Could not load swaps', false);
+      }
+    }
+
+    function renderSwaps(swaps) {
+      listEl.innerHTML = '';
+      if (!swaps.length) {
+        emptyEl.classList.remove('hidden');
+        return;
+      }
+      emptyEl.classList.add('hidden');
+      swaps.slice(0, 6).forEach((item) => {
+        const card = document.createElement('div');
+        card.className = 'border border-outline-variant/20 rounded-2xl p-4 bg-surface-container space-y-2';
+        card.innerHTML = `
+          <div class="flex items-center justify-between">
+            <h4 class="text-white font-headline font-bold text-lg">${item.title}</h4>
+            <span class="text-xs text-primary-container font-bold">+${item.tokensAwarded || 10} tokens</span>
+          </div>
+          <p class="text-on-surface-variant text-sm">Need: ${item.need}</p>
+          <p class="text-on-surface-variant text-sm">Offer: ${item.offer}</p>
+          ${item.availability ? `<p class="text-on-surface-variant text-xs">Availability: ${item.availability}</p>` : ''}
+          <p class="text-on-surface-variant/60 text-xs">Posted: ${new Date(item.createdAt).toLocaleString()}</p>
+        `;
+        listEl.appendChild(card);
+      });
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const submitBtn = document.getElementById('swap-submit');
+      submitBtn.disabled = true;
+      const formData = new FormData(form);
+      const payload = Object.fromEntries(formData.entries());
+      lastEmail = payload.email;
+      try {
+        const res = await fetch(\`\${API_BASE}/api/swap\`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setStatus(data?.message || 'Failed to post', false);
+        } else {
+          setStatus('Swap posted! Tokens awarded.', true);
+          form.reset();
+          loadSwaps(lastEmail);
+        }
+      } catch (err) {
+        setStatus('Network error. Try again.', false);
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    refreshBtn.addEventListener('click', () => loadSwaps(lastEmail));
+  </script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+.dot-grid {
+  background-image: radial-gradient(circle, #424936 1px, transparent 1px);
+  background-size: 30px 30px;
+}
+
+.marquee {
+  display: flex;
+  overflow: hidden;
+  user-select: none;
+  gap: 2rem;
+}
+
+.marquee-content {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-around;
+  min-width: 100%;
+  gap: 2rem;
+}
+
+.text-huge {
+  font-size: clamp(64px, 11vw, 140px);
+  line-height: 0.9;
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 22s linear infinite;
+}
+
+body {
+  background-color: #131313;
+  color: #e2e2e2;
+}
