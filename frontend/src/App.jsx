@@ -1,9 +1,28 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
+import RecruiterApp from './RecruiterApp.jsx'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000'
 
 function App() {
+  const [hash, setHash] = useState(() =>
+    typeof window === 'undefined' ? '' : window.location.hash,
+  )
+
+  useEffect(() => {
+    const onHashChange = () => setHash(window.location.hash)
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
+
+  if (hash.startsWith('#/recruiter')) {
+    return <RecruiterApp />
+  }
+
+  return <LandingApp />
+}
+
+function LandingApp() {
   const [heroEmail, setHeroEmail] = useState('')
   const [footerEmail, setFooterEmail] = useState('')
   const [status, setStatus] = useState({ place: null, state: 'idle', message: '' })
@@ -40,7 +59,7 @@ function App() {
       setStatus({ place, state: 'success', message: 'You are on the list!' })
       if (place === 'hero') setHeroEmail('')
       if (place === 'footer') setFooterEmail('')
-    } catch (err) {
+    } catch {
       setStatus({ place, state: 'error', message: 'Network error. Try again.' })
     }
   }
@@ -82,6 +101,15 @@ function App() {
             type="button"
           >
             Sign in
+          </button>
+          <button
+            className="text-white/70 font-medium hover:text-white transition-all"
+            type="button"
+            onClick={() => {
+              window.location.hash = '#/recruiter'
+            }}
+          >
+            Recruiter UI
           </button>
           <button
             className="bg-white text-[#131313] px-6 py-2.5 rounded font-headline font-bold uppercase tracking-wide hover:opacity-90 transition-all active:scale-95"
@@ -721,7 +749,7 @@ function App() {
                     message: 'Signed in! (demo token issued)'
                   })
                   setAuthPassword('')
-                } catch (_err) {
+                } catch {
                   setAuthStatus({
                     state: 'error',
                     message: 'Network error. Try again.'
@@ -853,7 +881,7 @@ function App() {
                     message: 'Account created! You can sign in now.'
                   })
                   setSignupPassword('')
-                } catch (_err) {
+                } catch {
                   setSignupStatus({
                     state: 'error',
                     message: 'Network error. Try again.'

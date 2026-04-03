@@ -16,15 +16,17 @@
 
 ## 2) Frontend Setup (React + Tailwind)
 
-1. Go to client folder:
-   - `cd client`
+1. Go to frontend folder:
+   - `cd frontend`
 2. Install dependencies:
    - `npm install`
-3. Copy `client/.env.example` to `client/.env` (optional if backend is on `http://localhost:5000`).
+3. (Optional) Copy `frontend/.env.example` to `frontend/.env`.
 4. Run frontend:
    - `npm run dev`
 
 Frontend default URL: `http://localhost:5173`
+
+Recruiter UI route: `http://localhost:5173/#/recruiter`
 
 ## API
 
@@ -58,5 +60,5 @@ Terminal 1 (backend):
 - `npm run dev`
 
 Terminal 2 (frontend):
-- `cd client`
+- `cd frontend`
 - `npm run dev`
