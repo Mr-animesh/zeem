@@ -249,8 +249,27 @@ Output format constraints:
   }
 };
 
+const getLeaderboard = async (req, res, next) => {
+try {
+const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
+const leaderboard = await User.find({})
+.sort({ difficultyScore: -1, updatedAt: -1 })
+.limit(limit)
+.select("name email location githubRepoUrl difficultyScore createdAt")
+.lean();
+return res.status(200).json({
+success: true,
+leaderboard,
+});
+} catch (error) {
+return next(error);
+}
+};
+
+
 module.exports = {
   registerUser,
   matchUsers,
+  getLeaderboard
 };
 
