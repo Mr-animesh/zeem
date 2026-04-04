@@ -24,6 +24,7 @@ function RecruiterApp() {
     username: '',
     email: '',
     location: '',
+    githubProfileUrl: '',
     profilePicture: ''
   })
   const [registerForm, setRegisterForm] = useState({
@@ -31,6 +32,7 @@ function RecruiterApp() {
     username: '',
     email: '',
     location: '',
+    githubProfileUrl: '',
     skillInput: '',
     platformInput: '',
     skills: [],
@@ -175,6 +177,7 @@ function RecruiterApp() {
       username: '',
       email: '',
       location: '',
+      githubProfileUrl: '',
       skillInput: '',
       platformInput: '',
       skills: [],
@@ -197,6 +200,7 @@ function RecruiterApp() {
       name: registerForm.name.trim(),
       email: registerForm.email.trim(),
       location: registerForm.location.trim(),
+      githubProfileUrl: registerForm.githubProfileUrl.trim(),
       projectSummary: {
         username: registerForm.username.trim(),
         skills: registerForm.skills,
@@ -231,6 +235,7 @@ function RecruiterApp() {
         username: payload.projectSummary.username,
         email: payload.email,
         location: payload.location,
+        githubProfileUrl: payload.githubProfileUrl,
         profilePicture: payload.projectSummary.profilePicture || ''
       }
       setCurrentProfile(savedProfile)
@@ -305,6 +310,16 @@ function RecruiterApp() {
   const getRegisterStepError = () => {
     if (registerStep === 0 && !registerForm.name.trim()) return 'Name is required.'
     if (registerStep === 1 && !registerForm.username.trim()) return 'Username is required.'
+    if (registerStep === 1 && !registerForm.githubProfileUrl.trim())
+      return 'GitHub profile URL is required.'
+    if (
+      registerStep === 1 &&
+      registerForm.githubProfileUrl.trim() &&
+      !/^https?:\/\/(www\.)?github\.com\/[^/\s]+\/?$/.test(
+        registerForm.githubProfileUrl.trim()
+      )
+    )
+      return 'Enter a valid GitHub profile URL.'
     if (registerStep === 2 && !emailIsValid) return 'Enter a valid email.'
     if (registerStep === 3 && !registerForm.location.trim()) return 'Location is required.'
     if (registerStep === 4 && !registerForm.skills.length) return 'Add at least one skill.'
@@ -812,10 +827,20 @@ function RecruiterApp() {
                 key={`${u.email}-${i}`}
                 className="mt-3 flex items-center justify-between rounded-lg border border-outline-variant/20 bg-background/40 px-4 py-3"
               >
-                <span className="text-white">{u.name}</span>
-                <span className="font-bold text-primary-container">
-                  {Number.isFinite(Number(u.difficultyScore)) ? u.difficultyScore : '-'}
-                </span>
+                <div className="flex flex-col">
+                  <span className="text-white">{u.name}</span>
+                  {u.location && (
+                    <span className="text-xs text-white/60">{u.location}</span>
+                  )}
+                </div>
+                <div className="text-right">
+                  <span className="block text-xs uppercase tracking-wide text-white/60">
+                    Score
+                  </span>
+                  <span className="font-bold text-primary-container">
+                    {Number.isFinite(Number(u.profileScore)) ? Number(u.profileScore) : '-'}
+                  </span>
+                </div>
               </div>
             ))}
           </section>
@@ -1408,6 +1433,17 @@ function RecruiterApp() {
                     onChange={onRegisterFieldChange}
                     className="w-full rounded border border-outline-variant/30 bg-background px-3 py-2 text-sm text-white placeholder:text-white/40"
                     placeholder="Enter username"
+                    required
+                  />
+                  <label className="mb-2 mt-4 block text-sm font-medium text-white/90">
+                    GitHub profile URL
+                  </label>
+                  <input
+                    name="githubProfileUrl"
+                    value={registerForm.githubProfileUrl}
+                    onChange={onRegisterFieldChange}
+                    className="w-full rounded border border-outline-variant/30 bg-background px-3 py-2 text-sm text-white placeholder:text-white/40"
+                    placeholder="https://github.com/your-username"
                     required
                   />
                 </div>
