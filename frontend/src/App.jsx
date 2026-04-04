@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react'
 import './App.css'
 import RecruiterApp from './RecruiterApp.jsx'
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000'
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL ||
+  import.meta.env.VITE_API_BASE ||
+  'http://localhost:5000'
 
 function App() {
   const [hash, setHash] = useState(() =>
@@ -714,7 +717,7 @@ function LandingApp() {
                 e.preventDefault()
                 setAuthStatus({ state: 'loading', message: 'Checking…' })
                 try {
-                  const res = await fetch(`${API_BASE}/api/login`, {
+                  const res = await fetch(`${API_BASE}/api/auth/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -730,9 +733,44 @@ function LandingApp() {
                     })
                     return
                   }
+                  const token = data?.token
+                  if (!token) {
+                    setAuthStatus({
+                      state: 'error',
+                      message: 'Login succeeded but no token was returned.'
+                    })
+                    return
+                  }
+
+                  try {
+                    window.localStorage.setItem('auth_token', token)
+                  } catch {
+                    // Ignore storage errors in non-browser environments.
+                  }
+
+                  let profileLabel = ''
+                  try {
+                    const profileRes = await fetch(`${API_BASE}/api/auth/profile`, {
+                      headers: {
+                        Authorization: `Bearer ${token}`
+                      }
+                    })
+                    const profileData = await profileRes.json().catch(() => ({}))
+                    if (profileRes.ok && profileData?.user) {
+                      profileLabel =
+                        profileData.user.name ||
+                        profileData.user.email ||
+                        ''
+                    }
+                  } catch {
+                    // Silent failure; token is still stored.
+                  }
+
                   setAuthStatus({
                     state: 'success',
-                    message: 'Signed in! (demo token issued)'
+                    message: profileLabel
+                      ? `Signed in as ${profileLabel}.`
+                      : 'Signed in successfully.'
                   })
                   setAuthPassword('')
                 } catch {
@@ -839,20 +877,13 @@ function LandingApp() {
                 e.preventDefault()
                 setSignupStatus({ state: 'loading', message: 'Creating…' })
                 try {
-                  const res = await fetch(`${API_BASE}/api/signup`, {
+                  const res = await fetch(`${API_BASE}/api/auth/signup`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                       name: signupName,
                       email: signupEmail,
-                      password: signupPassword,
-                      skills: signupSkills,
-                      location: signupLocation,
-                      build_goal: signupGoal,
-                      open_to_collab: signupOpen,
-                      github_account_url: signupGithub,
-                      social: signupSocial,
-                      availability: signupAvailability
+                      password: signupPassword
                     })
                   })
                   const data = await res.json().catch(() => ({}))
@@ -863,9 +894,42 @@ function LandingApp() {
                     })
                     return
                   }
+
+                  const token = data?.token
+
+                  if (token) {
+                    try {
+                      window.localStorage.setItem('auth_token', token)
+                    } catch {
+                      // Ignore storage errors.
+                    }
+                  }
+
+                  let profileLabel = ''
+                  if (token) {
+                    try {
+                      const profileRes = await fetch(`${API_BASE}/api/auth/profile`, {
+                        headers: {
+                          Authorization: `Bearer ${token}`
+                        }
+                      })
+                      const profileData = await profileRes.json().catch(() => ({}))
+                      if (profileRes.ok && profileData?.user) {
+                        profileLabel =
+                          profileData.user.name ||
+                          profileData.user.email ||
+                          ''
+                      }
+                    } catch {
+                      // Silent failure; token may still be valid.
+                    }
+                  }
+
                   setSignupStatus({
                     state: 'success',
-                    message: 'Account created! You can sign in now.'
+                    message: profileLabel
+                      ? `Account created and signed in as ${profileLabel}.`
+                      : 'Account created successfully. You are now signed in.'
                   })
                   setSignupPassword('')
                 } catch {

@@ -13,6 +13,8 @@ const {
   offerHelpOnCollabProject,
 } = require("./controllers/matchController");
 
+const authRouter = require("./routes/auth");
+
 const app = express();
 
 app.use(cors());
@@ -25,6 +27,8 @@ app.get("/api/health", (req, res) => {
     uptime: process.uptime(),
   });
 });
+
+app.use("/api/auth", authRouter);
 
 app.post("/api/users/register", registerUser);
 app.post("/api/match", matchUsers);

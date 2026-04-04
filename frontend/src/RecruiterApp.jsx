@@ -123,10 +123,20 @@ function RecruiterApp() {
   }, [])
 
   useEffect(() => {
-    const onHashChange = () => setRecruiterHash(window.location.hash)
+    const onHashChange = () => {
+      const hash = window.location.hash
+      setRecruiterHash(hash)
+      setShowProfilePanel(hash.startsWith('#/recruiter/profile'))
+    }
+
+    onHashChange()
     window.addEventListener('hashchange', onHashChange)
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
+
+  const isLeaderboardPage = recruiterHash.startsWith('#/recruiter/leaderboard')
+  const isCollaboratorPage = recruiterHash.startsWith('#/recruiter/collaborator')
+  const isProfilePage = recruiterHash.startsWith('#/recruiter/profile')
 
   useEffect(() => {
     setProfileForm({
@@ -226,82 +236,12 @@ function RecruiterApp() {
       setRegisterMessage(
         `Profile saved for ${data.user?.name || payload.name} successfully.`
       )
-      setShowRegisterModal(false)
-      setShowProfilePanel(false)
-      setRegisterStep(0)
-      window.localStorage.setItem(REGISTERED_PROFILE_KEY, 'true')
-      const savedProfile = {
-        name: payload.name,
-        username: payload.projectSummary.username,
-        email: payload.email,
-        location: payload.location,
-        githubProfileUrl: payload.githubProfileUrl,
-        profilePicture: payload.projectSummary.profilePicture || ''
-      }
-      setCurrentProfile(savedProfile)
-      window.localStorage.setItem(PROFILE_DATA_KEY, JSON.stringify(savedProfile))
-      resetRegisterForm()
-
-      fetch(`${apiBase}/api/leaderboard?limit=15`)
-        .then((r) => r.json())
-        .then((lb) => {
-          if (lb.success && Array.isArray(lb.leaderboard)) {
-            setLeaderboard(lb.leaderboard)
-          }
-        })
-        .catch(() => {})
     } catch {
-      setError('Could not connect to backend.')
+      setError('Failed to save profile.')
     }
   }
 
-  const runMatch = async (e) => {
-    e.preventDefault()
-    setHasRunMatch(true)
-    setLoading(true)
-    setError('')
-    setResults([])
-
-    try {
-      const composedMission = [
-        matchForm.missionDescription,
-        matchForm.neededSkills && `Required skills / tech stack: ${matchForm.neededSkills}`,
-        matchForm.tokensOffered && `Tokens offered for this collaboration: ${matchForm.tokensOffered}`
-      ]
-        .filter(Boolean)
-        .join(' ')
-
-      const payload = {
-        targetLocation: matchForm.targetLocation,
-        missionDescription: composedMission,
-        ...(matchForm.keyword.trim() && { keyword: matchForm.keyword.trim() })
-      }
-
-      const response = await fetch(`${apiBase}/api/match`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-
-      const data = await response.json().catch(() => ({}))
-
-      if (!response.ok) {
-        setError(data.message || 'Matching failed.')
-        return
-      }
-
-      setResults(data.results || [])
-    } catch {
-      setError('Could not connect to backend.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const isLeaderboardPage = recruiterHash.startsWith('#/recruiter/leaderboard')
-  const isCollaboratorPage = recruiterHash.startsWith('#/recruiter/collaborator')
-  const isProfilePage = recruiterHash.startsWith('#/recruiter/profile')
-  const totalRegisterSteps = 7
+  const totalRegisterSteps = 6
   const navItemClass =
     'rounded-md border px-3 py-2 text-sm font-bold uppercase tracking-wide transition-colors'
 
@@ -323,7 +263,6 @@ function RecruiterApp() {
     if (registerStep === 2 && !emailIsValid) return 'Enter a valid email.'
     if (registerStep === 3 && !registerForm.location.trim()) return 'Location is required.'
     if (registerStep === 4 && !registerForm.skills.length) return 'Add at least one skill.'
-    if (registerStep === 5 && !registerForm.platforms.length) return 'Add at least one platform.'
     return ''
   }
 
@@ -346,6 +285,13 @@ function RecruiterApp() {
     setError('')
     resetRegisterForm()
     setShowRegisterModal(true)
+    try {
+      if (window.location.hash.startsWith('#/recruiter/profile')) {
+        window.location.hash = '#/recruiter'
+      }
+    } catch {
+      // Ignore hash update errors in non-browser environments.
+    }
   }
 
   const filteredProjects = createdProjects.filter((project) => {
@@ -587,17 +533,54 @@ function RecruiterApp() {
     setError('')
   }
 
+  const runMatch = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+    setResults([])
+    setHasRunMatch(false)
+
+    try {
+      const response = await fetch(`${apiBase}/api/match`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetLocation: matchForm.targetLocation.trim(),
+          missionDescription: matchForm.missionDescription.trim(),
+          keyword: matchForm.keyword.trim(),
+          neededSkills: matchForm.neededSkills.trim(),
+          tokensOffered: matchForm.tokensOffered.trim()
+        })
+      })
+
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        setError(data.message || 'Match request failed.')
+        setHasRunMatch(true)
+        setLoading(false)
+        return
+      }
+
+      setResults(data.matches || data.results || [])
+      setHasRunMatch(true)
+    } catch {
+      setError('Network error. Try again.')
+    }
+    setLoading(false)
+  }
+
   return (
     <main className="min-h-screen bg-[#131313] text-white dot-grid">
       <nav className="sticky top-0 z-40 border-b border-outline-variant/20 bg-[#131313]/90 backdrop-blur">
-        <div className="relative flex w-full items-center px-8 py-4">
+        <div className="flex w-full items-center px-8 py-4">
           <a
             className="text-3xl font-black text-[#A3E635] tracking-tight font-headline italic"
             href="/"
           >
             BUILDMATE
           </a>
-          <div className="absolute left-1/2 flex -translate-x-1/2 items-center gap-3">
+          <div className="ml-auto flex items-center gap-3">
             <a
               href="#/recruiter"
               className={`${navItemClass} ${
@@ -628,89 +611,24 @@ function RecruiterApp() {
             >
               Collaborator
             </a>
-            <a
-              href="#/recruiter/profile"
+            <button
+              type="button"
               className={`${navItemClass} ${
                 isProfilePage
                   ? 'border-primary-container/60 bg-transparent text-primary-container'
                   : 'border-outline-variant/40 bg-transparent text-white hover:border-primary-container hover:text-primary-container'
               }`}
+              onClick={() => {
+                try {
+                  window.location.hash = '#/recruiter/profile'
+                } catch {
+                  // ignore
+                }
+                setShowProfilePanel(true)
+              }}
             >
               Profile
-            </a>
-          </div>
-          <div className="relative ml-auto">
-            <button
-              type="button"
-              className="flex items-center gap-3 rounded-lg border border-outline-variant/30 bg-surface-container px-3 py-2 text-left"
-              onClick={() => setShowProfilePanel((prev) => !prev)}
-            >
-              {currentProfile?.profilePicture ? (
-                <img
-                  src={currentProfile.profilePicture}
-                  alt={currentProfile.name || 'Profile'}
-                  className="h-10 w-10 rounded-full object-cover border border-outline-variant/40"
-                />
-              ) : (
-                <div className="h-10 w-10 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-bold">
-                  {(currentProfile?.name || 'U').trim().charAt(0).toUpperCase()}
-                </div>
-              )}
-              <div className="leading-tight">
-                <p className="text-xs uppercase tracking-[0.18em] text-white/50">Profile</p>
-                <p className="text-sm font-bold text-white">
-                  {currentProfile?.name || 'Not set'}
-                </p>
-                <p className="text-xs text-primary-container">
-                  {currentProfile?.username ? `@${currentProfile.username}` : 'Register to add profile'}
-                </p>
-              </div>
             </button>
-
-            {showProfilePanel && (
-              <div className="absolute right-0 mt-2 w-72 rounded-xl border border-outline-variant/30 bg-surface-container p-4 shadow-xl">
-                <p className="text-xs uppercase tracking-[0.2em] text-white/50">Profile Details</p>
-                <div className="mt-3 space-y-2">
-                  <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="text-white/80">Name</span>
-                    <span className="text-right text-primary-container">{currentProfile?.name || '-'}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="text-white/80">Username</span>
-                    <span className="text-right text-primary-container">
-                      {currentProfile?.username ? `@${currentProfile.username}` : '-'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="text-white/80">Email</span>
-                    <span className="text-right text-primary-container">{currentProfile?.email || '-'}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="text-white/80">Location</span>
-                    <span className="text-right text-primary-container">{currentProfile?.location || '-'}</span>
-                  </div>
-                </div>
-                <div className="mt-4 flex gap-2">
-                  <button
-                    type="button"
-                    className="rounded border border-outline-variant/40 px-3 py-2 text-xs font-bold uppercase tracking-wide text-white hover:border-primary-container"
-                    onClick={() => {
-                      setShowProfilePanel(false)
-                      window.location.hash = '#/recruiter/profile'
-                    }}
-                  >
-                    Edit Profile
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded border border-red-500/50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-red-300 hover:bg-red-950/30"
-                    onClick={signOutProfile}
-                  >
-                    Sign Out
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </nav>
@@ -728,94 +646,8 @@ function RecruiterApp() {
           </div>
         )}
 
-        {isProfilePage ? (
-          <form
-            onSubmit={saveProfileEdits}
-            className="rounded-xl border border-outline-variant/20 bg-surface-container p-5 shadow-sm"
-          >
-            <h2 className="text-lg font-headline font-black uppercase tracking-wide text-primary-container">
-              Profile
-            </h2>
-            <p className="mt-1 text-sm text-white/60">
-              Edit your details here. Profile picture is optional.
-            </p>
-
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <input
-                name="name"
-                value={profileForm.name}
-                onChange={onProfileFieldChange}
-                className="w-full rounded border border-outline-variant/30 bg-background px-3 py-2 text-sm text-white placeholder:text-white/40"
-                placeholder="Name"
-                required
-              />
-              <input
-                name="username"
-                value={profileForm.username}
-                onChange={onProfileFieldChange}
-                className="w-full rounded border border-outline-variant/30 bg-background px-3 py-2 text-sm text-white placeholder:text-white/40"
-                placeholder="Username"
-                required
-              />
-              <input
-                name="email"
-                type="email"
-                value={profileForm.email}
-                onChange={onProfileFieldChange}
-                className="w-full rounded border border-outline-variant/30 bg-background px-3 py-2 text-sm text-white placeholder:text-white/40"
-                placeholder="Email"
-                required
-              />
-              <input
-                name="location"
-                value={profileForm.location}
-                onChange={onProfileFieldChange}
-                className="w-full rounded border border-outline-variant/30 bg-background px-3 py-2 text-sm text-white placeholder:text-white/40"
-                placeholder="Location"
-                required
-              />
-            </div>
-
-            <input
-              type="file"
-              accept="image/*"
-              onChange={onProfileImageChange}
-              className="mt-3 w-full rounded border border-outline-variant/30 bg-background px-3 py-2 text-sm text-white file:mr-3 file:rounded file:border-0 file:bg-primary-container file:px-3 file:py-1 file:font-bold file:text-on-primary"
-            />
-            {profileForm.profilePicture && (
-              <div className="mt-3 flex items-center gap-3">
-                <img
-                  src={profileForm.profilePicture}
-                  alt="Profile preview"
-                  className="h-14 w-14 rounded-full border border-outline-variant/40 object-cover"
-                />
-                <button
-                  type="button"
-                  className="rounded border border-outline-variant/40 px-3 py-2 text-xs font-bold uppercase tracking-wide text-white hover:border-primary-container"
-                  onClick={() =>
-                    setProfileForm((prev) => ({ ...prev, profilePicture: '' }))
-                  }
-                >
-                  Remove Image
-                </button>
-              </div>
-            )}
-
-            <div className="mt-4 flex gap-3">
-              <button className="rounded bg-primary-container px-4 py-2 font-headline font-bold uppercase tracking-wide text-on-primary hover:bg-primary">
-                Save Profile
-              </button>
-              <button
-                type="button"
-                className="rounded border border-outline-variant/40 bg-transparent px-4 py-2 font-headline font-bold uppercase tracking-wide text-white hover:border-primary-container hover:text-primary-container"
-                onClick={() => {
-                  window.location.hash = '#/recruiter'
-                }}
-              >
-                Done
-              </button>
-            </div>
-          </form>
+        {false ? (
+          <></>
         ) : isLeaderboardPage ? (
           <section id="leaderboard" className="rounded-xl border border-outline-variant/20 bg-surface-container p-5 shadow-sm">
             <h2 className="text-lg font-headline font-black uppercase tracking-wide text-primary-container">
@@ -1196,22 +1028,6 @@ function RecruiterApp() {
                   className="w-full rounded border border-outline-variant/30 bg-background px-3 py-2 text-sm text-white placeholder:text-white/40"
                 />
 
-                <input
-                  name="tokensOffered"
-                  value={matchForm.tokensOffered}
-                  onChange={onMatchChange}
-                  placeholder="Tokens you will pay (optional)"
-                  className="w-full rounded border border-outline-variant/30 bg-background px-3 py-2 text-sm text-white placeholder:text-white/40"
-                />
-
-                <input
-                  name="keyword"
-                  value={matchForm.keyword}
-                  onChange={onMatchChange}
-                  placeholder="Optional keyword"
-                  className="w-full rounded border border-outline-variant/30 bg-background px-3 py-2 text-sm text-white placeholder:text-white/40"
-                />
-
                 <button
                   className="rounded bg-primary-container px-4 py-2 font-headline font-bold uppercase tracking-wide text-on-primary hover:bg-primary disabled:opacity-60"
                   disabled={loading}
@@ -1291,7 +1107,7 @@ function RecruiterApp() {
                 name="targetLocation"
                 value={matchForm.targetLocation}
                 onChange={onMatchChange}
-                placeholder="Target location"
+                placeholder="Preferred teammate location (optional)"
                 className="w-full rounded border border-outline-variant/30 bg-background px-3 py-2 text-sm text-white placeholder:text-white/40"
                 required
               />
@@ -1300,7 +1116,7 @@ function RecruiterApp() {
                 name="missionDescription"
                 value={matchForm.missionDescription}
                 onChange={onMatchChange}
-                placeholder="What are you building and what help do you need?"
+                placeholder="Describe your project and what kind of collaborator you want to work with"
                 className="h-24 w-full rounded border border-outline-variant/30 bg-background px-3 py-2 text-sm text-white placeholder:text-white/40"
                 required
               />
@@ -1309,7 +1125,7 @@ function RecruiterApp() {
                 name="neededSkills"
                 value={matchForm.neededSkills}
                 onChange={onMatchChange}
-                placeholder="Required tech stack / skills (e.g. React, Node, UI/UX)"
+                placeholder="Skill / tech you want (e.g. React, UI/UX designer, Backend dev)"
                 className="w-full rounded border border-outline-variant/30 bg-background px-3 py-2 text-sm text-white placeholder:text-white/40"
               />
 
@@ -1317,15 +1133,7 @@ function RecruiterApp() {
                 name="tokensOffered"
                 value={matchForm.tokensOffered}
                 onChange={onMatchChange}
-                placeholder="Tokens you will pay (optional)"
-                className="w-full rounded border border-outline-variant/30 bg-background px-3 py-2 text-sm text-white placeholder:text-white/40"
-              />
-
-              <input
-                name="keyword"
-                value={matchForm.keyword}
-                onChange={onMatchChange}
-                placeholder="Optional keyword"
+                placeholder="Tokens you will pay for this collaboration (optional)"
                 className="w-full rounded border border-outline-variant/30 bg-background px-3 py-2 text-sm text-white placeholder:text-white/40"
               />
 
@@ -1371,6 +1179,129 @@ function RecruiterApp() {
                   ))}
                 </div>
               )}
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showProfilePanel && (
+        <div className="pointer-events-none fixed inset-y-0 right-0 z-[70] flex justify-end">
+          <div className="pointer-events-auto h-full w-full max-w-md overflow-y-auto border-l border-outline-variant/30 bg-surface-container p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-headline font-black uppercase tracking-wide text-primary-container">
+                Profile
+              </h3>
+              <button
+                type="button"
+                className="h-8 w-8 rounded-full border border-outline-variant/40 text-sm text-white hover:border-primary-container hover:text-primary-container"
+                onClick={() => {
+                  try {
+                    if (window.location.hash.startsWith('#/recruiter/profile')) {
+                      window.location.hash = '#/recruiter'
+                    }
+                  } catch {
+                    // ignore
+                  }
+                  setShowProfilePanel(false)
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <form
+              onSubmit={saveProfileEdits}
+              className="space-y-3"
+            >
+              <div className="grid gap-3 md:grid-cols-2">
+                <input
+                  name="name"
+                  value={profileForm.name}
+                  onChange={onProfileFieldChange}
+                  className="w-full rounded border border-outline-variant/30 bg-background px-3 py-2 text-sm text-white placeholder:text-white/40"
+                  placeholder="Name"
+                  required
+                />
+                <input
+                  name="username"
+                  value={profileForm.username}
+                  onChange={onProfileFieldChange}
+                  className="w-full rounded border border-outline-variant/30 bg-background px-3 py-2 text-sm text-white placeholder:text-white/40"
+                  placeholder="Username"
+                  required
+                />
+                <input
+                  name="email"
+                  type="email"
+                  value={profileForm.email}
+                  onChange={onProfileFieldChange}
+                  className="w-full rounded border border-outline-variant/30 bg-background px-3 py-2 text-sm text-white placeholder:text-white/40"
+                  placeholder="Email"
+                  required
+                />
+                <input
+                  name="location"
+                  value={profileForm.location}
+                  onChange={onProfileFieldChange}
+                  className="w-full rounded border border-outline-variant/30 bg-background px-3 py-2 text-sm text-white placeholder:text-white/40"
+                  placeholder="Location"
+                  required
+                />
+              </div>
+
+              <input
+                type="file"
+                accept="image/*"
+                onChange={onProfileImageChange}
+                className="w-full rounded border border-outline-variant/30 bg-background px-3 py-2 text-sm text-white file:mr-3 file:rounded file:border-0 file:bg-primary-container file:px-3 file:py-1 file:font-bold file:text-on-primary"
+              />
+              {profileForm.profilePicture && (
+                <div className="mt-2 flex items-center gap-3">
+                  <img
+                    src={profileForm.profilePicture}
+                    alt="Profile preview"
+                    className="h-12 w-12 rounded-full border border-outline-variant/40 object-cover"
+                  />
+                  <button
+                    type="button"
+                    className="rounded border border-outline-variant/40 px-3 py-1 text-xs font-bold uppercase tracking-wide text-white hover:border-primary-container"
+                    onClick={() =>
+                      setProfileForm((prev) => ({ ...prev, profilePicture: '' }))
+                    }
+                  >
+                    Remove Image
+                  </button>
+                </div>
+              )}
+
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button className="rounded bg-primary-container px-4 py-2 text-xs font-headline font-bold uppercase tracking-wide text-on-primary hover:bg-primary">
+                  Save Profile
+                </button>
+                <button
+                  type="button"
+                  className="rounded border border-outline-variant/40 bg-transparent px-4 py-2 text-xs font-headline font-bold uppercase tracking-wide text-white hover:border-primary-container hover:text-primary-container"
+                  onClick={() => {
+                    try {
+                      if (window.location.hash.startsWith('#/recruiter/profile')) {
+                        window.location.hash = '#/recruiter'
+                      }
+                    } catch {
+                      // ignore
+                    }
+                    setShowProfilePanel(false)
+                  }}
+                >
+                  Done
+                </button>
+                <button
+                  type="button"
+                  className="rounded border border-red-500/60 bg-transparent px-4 py-2 text-xs font-headline font-bold uppercase tracking-wide text-red-300 hover:bg-red-950/30"
+                  onClick={signOutProfile}
+                >
+                  Sign Out
+                </button>
+              </div>
             </form>
           </div>
         </div>
@@ -1520,47 +1451,6 @@ function RecruiterApp() {
               )}
 
               {registerStep === 5 && (
-                <div className="rounded-xl border border-outline-variant/20 bg-background/40 p-4">
-                  <label className="mb-2 block text-sm font-medium text-white/90">Platforms (multiple)</label>
-                  <div className="flex gap-2">
-                    <input
-                      name="platformInput"
-                      value={registerForm.platformInput}
-                      onChange={onRegisterFieldChange}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          addListItem('platforms', 'platformInput')
-                        }
-                      }}
-                      className="w-full rounded border border-outline-variant/30 bg-background px-3 py-2 text-sm text-white placeholder:text-white/40"
-                      placeholder="Add platform and press Enter"
-                    />
-                    <button
-                      type="button"
-                      className="rounded bg-primary-container px-3 py-2 font-bold text-on-primary"
-                      onClick={() => addListItem('platforms', 'platformInput')}
-                    >
-                      Add
-                    </button>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {registerForm.platforms.map((platform) => (
-                      <button
-                        key={platform}
-                        type="button"
-                        className="rounded-full bg-primary-container/20 px-3 py-1 text-xs text-primary-container"
-                        onClick={() => removeListItem('platforms', platform)}
-                        title="Remove"
-                      >
-                        {platform} x
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {registerStep === 6 && (
                 <div className="rounded-xl border border-outline-variant/20 bg-background/40 p-4">
                   <label className="mb-2 block text-sm font-medium text-white/90">
                     Profile Picture (optional)
