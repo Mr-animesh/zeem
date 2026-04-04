@@ -19,9 +19,15 @@ const userSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
-    githubRepoUrl: {
+    /** Normalized GitHub profile URL (https://github.com/<username>) */
+    githubProfileUrl: {
       type: String,
       required: true,
+      trim: true,
+    },
+    githubRepoUrl: {
+      type: String,
+      default: "",
       trim: true,
     },
     /** User-declared at registration (README-style; merged into projectSummary + Project keywords) */
@@ -41,6 +47,19 @@ const userSchema = new mongoose.Schema(
     projectSummary: {
       type: mongoose.Schema.Types.Mixed,
       required: true,
+    },
+    /** Cached GitHub profile signals (followers, repos, stars, top languages, etc.) */
+    profileStats: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    /** Profile-based score (0-100) used for leaderboard ranking */
+    profileScore: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 0,
+      index: true,
     },
     /** Latest submitted project difficulty (1–10) */
     difficultyScore: {

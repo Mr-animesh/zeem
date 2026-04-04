@@ -92,6 +92,280 @@ const normalizeGithubRepoUrl = (input) => {
   }
 };
 
+const normalizeGithubProfileUrl = (input) => {
+  const raw = String(input || "").trim();
+  if (!raw) return "";
+  try {
+    if (raw.startsWith("git@github.com:")) {
+      const path = raw.replace("git@github.com:", "").replace(/\.git$/i, "");
+      const parts = path.split("/").filter(Boolean);
+      if (!parts.length) return "";
+      return `https://github.com/${parts[0]}`;
+    }
+    const u = new URL(raw.startsWith("http") ? raw : `https://${raw}`);
+    if (!u.hostname.toLowerCase().includes("github.com")) return "";
+    const parts = u.pathname.replace(/\/+$/, "").split("/").filter(Boolean);
+    if (!parts.length) return "";
+    // Accept either a profile URL (/owner) or repo URL (/owner/repo) and normalize to profile.
+    return `https://github.com/${parts[0]}`;
+  } catch {
+    return "";
+  }
+};
+
+const parseGithubUsernameFromProfileUrl = (normalizedProfileUrl) => {
+  const m = String(normalizedProfileUrl || "").match(/github\.com\/([^/]+)\/?$/i);
+  return m ? m[1] : "";
+};
+
+/** Public GitHub REST API profile signals (no repo code analysis). Optional GITHUB_TOKEN for higher rate limits. */
+async function fetchGithubProfileStats(username) {
+  if (!username) return null;
+  try {
+    const token = process.env.GITHUB_TOKEN?.trim();
+    const headers = {
+      Accept: "application/vnd.github+json",
+      "User-Agent": "ai-recruiter-matcher/1.0",
+    };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    const userRes = await fetch(`https://api.github.com/users/${username}`, {
+      headers,
+    });
+    if (!userRes.ok) return null;
+    const userJson = await userRes.json();
+
+    const perPage = 100;
+    const maxPages = 2; // cap to avoid heavy API usage
+    const repos = [];
+    for (let page = 1; page <= maxPages; page += 1) {
+      const repoRes = await fetch(
+        `https://api.github.com/users/${username}/repos?per_page=${perPage}&page=${page}&sort=updated`,
+        { headers },
+      );
+      if (!repoRes.ok) break;
+      const repoJson = await repoRes.json();
+      if (!Array.isArray(repoJson) || !repoJson.length) break;
+      repos.push(...repoJson);
+      if (repoJson.length < perPage) break;
+    }
+
+    let totalStars = 0;
+    let totalForks = 0;
+    const languageCounts = new Map();
+    for (const r of repos) {
+      totalStars += Number(r?.stargazers_count) || 0;
+      totalForks += Number(r?.forks_count) || 0;
+      const lang = String(r?.language || "").trim();
+      if (lang) languageCounts.set(lang, (languageCounts.get(lang) || 0) + 1);
+    }
+
+    const topLanguages = [...languageCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([language, count]) => ({ language, count }));
+
+    const createdAt = userJson.created_at || null;
+    const updatedAt = userJson.updated_at || null;
+
+    return {
+      username,
+      profileUrl: `https://github.com/${username}`,
+      publicRepos: Number(userJson.public_repos) || 0,
+      followers: Number(userJson.followers) || 0,
+      following: Number(userJson.following) || 0,
+      createdAt,
+      updatedAt,
+      repoSampled: repos.length,
+      totalStars,
+      totalForks,
+      topLanguages,
+    };
+  } catch {
+    return null;
+  }
+}
+
+const computeProfileScoreFromStats = (stats) => {
+  if (!stats) return 0;
+
+  const clamp01 = (x) => Math.max(0, Math.min(1, x));
+  const logNorm = (value, cap) => {
+    const v = Math.max(0, Number(value) || 0);
+    const c = Math.max(1, Number(cap) || 1);
+    return clamp01(Math.log10(v + 1) / Math.log10(c + 1));
+  };
+
+  const now = Date.now();
+  const createdAtMs = stats.createdAt ? Date.parse(stats.createdAt) : NaN;
+  const ageYears = Number.isFinite(createdAtMs)
+    ? (now - createdAtMs) / (365.25 * 24 * 60 * 60 * 1000)
+    : 0;
+
+  const updatedAtMs = stats.updatedAt ? Date.parse(stats.updatedAt) : NaN;
+  const monthsSinceUpdate = Number.isFinite(updatedAtMs)
+    ? (now - updatedAtMs) / (30.44 * 24 * 60 * 60 * 1000)
+    : 999;
+
+  const reposScore = clamp01((Number(stats.publicRepos) || 0) / 50) * 20;
+  const starsScore = logNorm(stats.totalStars, 5000) * 35;
+  const followersScore = logNorm(stats.followers, 2000) * 25;
+  const ageScore = clamp01(ageYears / 10) * 10;
+  const recencyScore = clamp01((24 - monthsSinceUpdate) / 24) * 10;
+
+  const total = reposScore + starsScore + followersScore + ageScore + recencyScore;
+  return Math.round(Math.max(0, Math.min(100, total)));
+};
+
+async function generateProfileEvaluationFromProfileUrl(githubProfileUrl) {
+  const normalizedProfileUrl = normalizeGithubProfileUrl(githubProfileUrl);
+  if (!normalizedProfileUrl) {
+    throw new Error("Invalid GitHub profile URL.");
+  }
+
+  const username = parseGithubUsernameFromProfileUrl(normalizedProfileUrl);
+  const stats = await fetchGithubProfileStats(username);
+  const languageSignals = Array.isArray(stats?.topLanguages)
+    ? stats.topLanguages.map((x) => String(x.language)).filter(Boolean)
+    : [];
+
+  if (process.env.MOCK_PROFILE_EVALUATION) {
+    const mock = parseJsonObjectFromModel(process.env.MOCK_PROFILE_EVALUATION);
+    const score = Math.round(Math.max(0, Math.min(100, Number(mock.profileScore) || 0)));
+    return {
+      summary: {
+        source: "mock-profile",
+        profileUrl: normalizedProfileUrl,
+        username,
+        profileStats: stats,
+        profileScore: score,
+        languages: languageSignals,
+        frameworks: [],
+        domains: [],
+        ...mock,
+      },
+      profileStats: stats,
+      profileScore: score,
+      usedAi: false,
+      reason: "mock-profile",
+    };
+  }
+
+  const heuristicScore = computeProfileScoreFromStats(stats);
+
+  if (!hasUsableOpenAIKey()) {
+    return {
+      summary: {
+        source: "github-profile-api",
+        profileUrl: normalizedProfileUrl,
+        username,
+        profileStats: stats,
+        profileScore: heuristicScore,
+        languages: languageSignals,
+        frameworks: [],
+        domains: [],
+        keywords: languageSignals,
+        confidence: stats ? "medium" : "low",
+        highlights: stats
+          ? [
+              `Public repos: ${stats.publicRepos}`,
+              `Followers: ${stats.followers}`,
+              `Stars across sampled repos: ${stats.totalStars}`,
+              stats.topLanguages?.length
+                ? `Top languages: ${stats.topLanguages
+                    .map((x) => x.language)
+                    .join(", ")}`
+                : null,
+            ].filter(Boolean)
+          : [
+              "GitHub profile stats unavailable (rate limit, network, or invalid username).",
+            ],
+        difficulty: clampDifficulty(heuristicScore ? heuristicScore / 10 : 5),
+      },
+      profileStats: stats,
+      profileScore: heuristicScore,
+      usedAi: false,
+      reason: stats ? "github-api" : "github-api-unavailable",
+    };
+  }
+
+  const systemPrompt = `You evaluate a developer using ONLY GitHub profile statistics.\n\nRules:\n- Do NOT analyze repo code or readme content.\n- Use only the numeric/profile signals provided.\n- Output MUST be a single JSON object only (no markdown, no code fences, no commentary).\n\nReturn this JSON shape:\n{\n  \"profileScore\": 0,\n  \"confidence\": \"high|medium|low\",\n  \"reasoning\": \"string\",\n  \"difficulty\": 5,\n  \"keywords\": [\"string\"],\n  \"highlights\": [\"string\"]\n}\n\nScoring guidance:\n- profileScore is 0-100.\n- difficulty is 1-10 and should correlate loosely with profileScore (higher score -> higher difficulty).\n- If stats are missing/sparse, lower confidence and score conservatively.`;
+
+  const userPrompt = JSON.stringify(
+    {
+      githubProfileUrl: normalizedProfileUrl,
+      username,
+      githubProfileStats: stats || {
+        note: "GitHub API returned no data (rate limit, network, or invalid username).",
+      },
+      heuristicScore,
+    },
+    null,
+    2,
+  );
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+      temperature: 0.2,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    });
+    const content = completion.choices?.[0]?.message?.content || "";
+    const obj = parseJsonObjectFromModel(content);
+    const score = Math.round(Math.max(0, Math.min(100, Number(obj.profileScore) || heuristicScore)));
+    const difficulty = clampDifficulty(obj.difficulty ?? (score ? score / 10 : 5));
+    const keywords = Array.isArray(obj.keywords) ? obj.keywords.map((x) => String(x)) : [];
+    const highlights = Array.isArray(obj.highlights) ? obj.highlights.map((x) => String(x)) : [];
+
+    return {
+      summary: {
+        source: "llm-profile",
+        profileUrl: normalizedProfileUrl,
+        username,
+        profileStats: stats,
+        profileScore: score,
+        languages: languageSignals,
+        frameworks: [],
+        domains: [],
+        confidence: String(obj.confidence || "medium"),
+        reasoning: String(obj.reasoning || ""),
+        keywords,
+        highlights,
+        difficulty,
+      },
+      profileStats: stats,
+      profileScore: score,
+      usedAi: true,
+      reason: "llm-profile",
+    };
+  } catch {
+    return {
+      summary: {
+        source: "github-profile-api",
+        profileUrl: normalizedProfileUrl,
+        username,
+        profileStats: stats,
+        profileScore: heuristicScore,
+        languages: languageSignals,
+        frameworks: [],
+        domains: [],
+        keywords: languageSignals,
+        confidence: stats ? "medium" : "low",
+        reasoning:
+          "Profile scored from public GitHub statistics; AI evaluation unavailable.",
+        difficulty: clampDifficulty(heuristicScore ? heuristicScore / 10 : 5),
+      },
+      profileStats: stats,
+      profileScore: heuristicScore,
+      usedAi: false,
+      reason: "llm-profile-error",
+    };
+  }
+}
+
 const localFallbackSummaryFromUrl = (githubRepoUrl) => {
   const normalized = normalizeGithubRepoUrl(githubRepoUrl) || String(githubRepoUrl || "").trim();
   const pathMatch = normalized.match(/github\.com\/([^/]+)\/([^/?#]+)/i);
@@ -399,16 +673,16 @@ const localFallbackMatch = (users, targetLocation, missionDescription) => {
   const ranked = users
     .map((user) => {
       const locationTokens = new Set(tokenize(user.location));
-      const summaryText = JSON.stringify(
-        user.projectSummary || {},
+      const evidenceText = JSON.stringify(
+        user.projectSummary || user.profileStats || {},
       ).toLowerCase();
-      const repoText = String(user.githubRepoUrl || "").toLowerCase();
+      const urlText = `${user.githubProfileUrl || ""} ${user.githubRepoUrl || ""}`.toLowerCase();
 
       const locationOverlap = [...locationTokens].filter((t) =>
         targetTokens.has(t),
       ).length;
       const missionOverlap = [...missionTokens].filter(
-        (t) => summaryText.includes(t) || repoText.includes(t),
+        (t) => evidenceText.includes(t) || urlText.includes(t),
       ).length;
 
       const locationScore = Math.min(30, locationOverlap * 10);
@@ -421,6 +695,7 @@ const localFallbackMatch = (users, targetLocation, missionDescription) => {
         email: String(user.email || ""),
         location: String(user.location || ""),
         totalDifficulty: Number(user.totalDifficulty) || 0,
+        profileScore: Number(user.profileScore) || 0,
         fitScore,
         reasoning:
           fitScore > 0
@@ -467,7 +742,10 @@ const parseJsonArrayFromModel = (rawText) => {
 
 const registerUser = async (req, res, next) => {
   try {
-    const { name, email, location, githubRepoUrl } = req.body;
+    const { name, email, location } = req.body;
+    const githubRepoUrl = req.body.githubRepoUrl;
+    const githubProfileUrl =
+      req.body.githubProfileUrl ?? req.body.githubProfile ?? req.body.githubUrl;
     const userSkills = parseStringList(req.body.skills);
     const userLanguages = parseStringList(
       req.body.userLanguages ?? req.body.languages,
@@ -494,23 +772,34 @@ const registerUser = async (req, res, next) => {
       }
     }
 
-    if (!name || !email || !location || !githubRepoUrl) {
+    if (!name || !email || !location || (!githubProfileUrl && !githubRepoUrl)) {
       return res.status(400).json({
         success: false,
-        message: "name, email, location, and githubRepoUrl are required.",
+        message:
+          "name, email, location, and githubProfileUrl (or githubRepoUrl) are required.",
       });
     }
 
-    const normalizedUrl = normalizeGithubRepoUrl(githubRepoUrl);
-    if (!normalizedUrl) {
+    const normalizedProfileUrl = normalizeGithubProfileUrl(
+      githubProfileUrl || githubRepoUrl,
+    );
+    if (!normalizedProfileUrl) {
       return res.status(400).json({
         success: false,
-        message: "githubRepoUrl must be a valid public GitHub repository URL.",
+        message:
+          "githubProfileUrl must be a valid public GitHub profile URL (https://github.com/<username>).",
       });
     }
 
-    const { summary: projectSummary, usedAi, reason } =
-      await generateProjectSummaryFromRepoUrl(githubRepoUrl);
+    const normalizedRepoUrl = normalizeGithubRepoUrl(githubRepoUrl);
+
+    const {
+      summary: projectSummary,
+      profileStats,
+      profileScore,
+      usedAi,
+      reason,
+    } = await generateProfileEvaluationFromProfileUrl(normalizedProfileUrl);
 
     mergeUserRegistrationIntoSummary(projectSummary, {
       userSkills,
@@ -519,32 +808,42 @@ const registerUser = async (req, res, next) => {
       extraFromClient,
     });
 
-    const difficultyScore = clampDifficulty(projectSummary.difficulty);
+    const difficultyScore = clampDifficulty(
+      projectSummary.difficulty ?? (profileScore ? profileScore / 10 : 5),
+    );
 
     const user = await User.create({
       name,
       email,
       location,
-      githubRepoUrl: normalizedUrl,
+      githubProfileUrl: normalizedProfileUrl,
+      githubRepoUrl: normalizedRepoUrl || "",
       skills: userSkills,
       userLanguages,
       projectNotes,
       projectSummary,
+      profileStats: profileStats || null,
+      profileScore: Number.isFinite(Number(profileScore)) ? Number(profileScore) : 0,
       difficultyScore,
     });
 
-    const projectName =
-      String(projectSummary.repoName || "").trim() ||
-      (normalizedUrl.match(/\/([^/]+)\/?$/) || [])[1] ||
-      "repository";
-    const keywords = buildKeywordsFromSummary(projectSummary);
-    await Project.create({
-      userId: user._id,
-      name: projectName,
-      keywords,
-      difficulty: difficultyScore,
-      githubRepoUrl: normalizedUrl,
-    });
+    if (normalizedRepoUrl) {
+      const { owner, repo } = parseOwnerRepo(normalizedRepoUrl);
+      const ghMeta = await fetchGithubRepoMetadata(owner, repo);
+      const repoSummary = buildSummaryFromGithubApi(normalizedRepoUrl, ghMeta);
+      const projectName =
+        String(repoSummary.repoName || "").trim() ||
+        (normalizedRepoUrl.match(/\/([^/]+)\/?$/) || [])[1] ||
+        "repository";
+      const keywords = buildKeywordsFromSummary(repoSummary);
+      await Project.create({
+        userId: user._id,
+        name: projectName,
+        keywords,
+        difficulty: clampDifficulty(repoSummary.difficulty),
+        githubRepoUrl: normalizedRepoUrl,
+      });
+    }
 
     await recalculateUserTotalDifficulty(user._id);
 
@@ -614,12 +913,18 @@ const matchUsers = async (req, res, next) => {
       name: u.name,
       email: u.email,
       location: u.location,
+      githubProfileUrl: u.githubProfileUrl || normalizeGithubProfileUrl(u.githubRepoUrl),
       githubRepoUrl: u.githubRepoUrl,
+      profileScore: Number(u.profileScore) || 0,
+      profileStats: u.profileStats || u.projectSummary?.profileStats || null,
       totalDifficulty: Number(u.totalDifficulty) || 0,
       projectSummary: u.projectSummary,
+      skills: u.skills || [],
+      userLanguages: u.userLanguages || [],
+      projectNotes: u.projectNotes || "",
     }));
 
-    const systemPrompt = `
+    const legacySystemPrompt = `
 You are an AI recruiter ranking engine.
 
 Context for each candidate:
@@ -641,6 +946,41 @@ Rules:
 - Prioritize mission/technical fit first, then location, then totalDifficulty for ties.
 - If projectSummary.confidence is low or data sparse, say so briefly and score conservatively.
 - fitScore 0–100; include only meaningful fits; sort descending.
+
+Output: STRICT JSON array only. No markdown. Each item:
+{
+  "userId": "string",
+  "name": "string",
+  "email": "string",
+  "location": "string",
+  "fitScore": 0,
+  "reasoning": "string"
+}
+`;
+
+    const systemPrompt = `
+You are an AI recruiter ranking engine.
+
+Context for each candidate:
+- githubProfileUrl: GitHub profile URL they registered.
+- profileStats: aggregated GitHub profile statistics (public repos, followers, stars across sampled repos, top languages).
+- profileScore: a 0-100 score derived from profileStats (use only as a weak tie-breaker).
+- projectSummary: stored structured context for the candidate (may include profile-based keywords/highlights and registration notes).
+
+Mission interpretation (be concise; map informal phrases to domains):
+- Recruiters often describe work in plain language. Map loosely, e.g. "text editor" -> editors/IDE plugins, rich text, WASM, performance; "2d game" -> canvas/WebGL/Unity2D/Godot; "multiplayer rpg" -> networking, sync, persistence, game logic; "VS Code" -> extension API, LSP, TypeScript tooling; "API" -> REST/GraphQL, auth, scaling.
+- Prefer overlap between mission themes and (projectSummary keywords/highlights) plus profileStats topLanguages over exact wording.
+
+Your task:
+1) Semantic geographic match: candidate location vs targetLocation (no coordinates).
+2) Mission fit: compare missionDescription to projectSummary + profileStats signals.
+3) Rank best-fit candidates.
+
+Rules:
+- Location: treat city/metro/region/borough relationships (e.g. Brooklyn ~ NYC).
+- Prioritize mission/technical fit first, then location, then profileScore for ties.
+- If profileStats are missing or data is sparse, say so briefly and score conservatively.
+- fitScore 0-100; include only meaningful fits; sort descending.
 
 Output: STRICT JSON array only. No markdown. Each item:
 {
@@ -707,6 +1047,7 @@ Output: STRICT JSON array only. No markdown. Each item:
         ...r,
         email: u?.email || r.email,
         totalDifficulty: Number(u?.totalDifficulty) || 0,
+        profileScore: Number(u?.profileScore) || 0,
       };
     });
 
@@ -741,9 +1082,9 @@ const getLeaderboard = async (req, res, next) => {
     await Promise.all(stale.map((u) => recalculateUserTotalDifficulty(u._id)));
 
     const rows = await User.find({})
-      .sort({ totalDifficulty: -1, updatedAt: -1 })
+      .sort({ profileScore: -1, totalDifficulty: -1, updatedAt: -1 })
       .limit(limit)
-      .select("name email location totalDifficulty projectCount")
+      .select("name email location profileScore totalDifficulty projectCount")
       .lean();
 
     const leaderboard = rows.map((u, index) => ({
@@ -751,6 +1092,7 @@ const getLeaderboard = async (req, res, next) => {
       name: u.name,
       email: u.email,
       location: u.location,
+      profileScore: Number.isFinite(u.profileScore) ? u.profileScore : 0,
       totalDifficulty: Number.isFinite(u.totalDifficulty) ? u.totalDifficulty : 0,
       projectCount: u.projectCount ?? 0,
     }));
@@ -935,8 +1277,11 @@ const submitProject = async (req, res, next) => {
       });
     }
 
-    const { summary: projectSummary, usedAi, reason } =
-      await generateProjectSummaryFromRepoUrl(githubRepoUrl);
+    const { owner, repo } = parseOwnerRepo(normalizedUrl);
+    const ghMeta = await fetchGithubRepoMetadata(owner, repo);
+    const projectSummary = buildSummaryFromGithubApi(normalizedUrl, ghMeta);
+    const usedAi = false;
+    const reason = ghMeta ? "github-api" : "github-api-unavailable";
 
     const diff = clampDifficulty(projectSummary.difficulty);
 
