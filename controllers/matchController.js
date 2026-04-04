@@ -268,18 +268,18 @@ async function generateProfileEvaluationFromProfileUrl(githubProfileUrl) {
         confidence: stats ? "medium" : "low",
         highlights: stats
           ? [
-              `Public repos: ${stats.publicRepos}`,
-              `Followers: ${stats.followers}`,
-              `Stars across sampled repos: ${stats.totalStars}`,
-              stats.topLanguages?.length
-                ? `Top languages: ${stats.topLanguages
-                    .map((x) => x.language)
-                    .join(", ")}`
-                : null,
-            ].filter(Boolean)
+            `Public repos: ${stats.publicRepos}`,
+            `Followers: ${stats.followers}`,
+            `Stars across sampled repos: ${stats.totalStars}`,
+            stats.topLanguages?.length
+              ? `Top languages: ${stats.topLanguages
+                .map((x) => x.language)
+                .join(", ")}`
+              : null,
+          ].filter(Boolean)
           : [
-              "GitHub profile stats unavailable (rate limit, network, or invalid username).",
-            ],
+            "GitHub profile stats unavailable (rate limit, network, or invalid username).",
+          ],
         difficulty: clampDifficulty(heuristicScore ? heuristicScore / 10 : 5),
       },
       profileStats: stats,
@@ -812,20 +812,42 @@ const registerUser = async (req, res, next) => {
       projectSummary.difficulty ?? (profileScore ? profileScore / 10 : 5),
     );
 
-    const user = await User.create({
-      name,
-      email,
-      location,
-      githubProfileUrl: normalizedProfileUrl,
-      githubRepoUrl: normalizedRepoUrl || "",
-      skills: userSkills,
-      userLanguages,
-      projectNotes,
-      projectSummary,
-      profileStats: profileStats || null,
-      profileScore: Number.isFinite(Number(profileScore)) ? Number(profileScore) : 0,
-      difficultyScore,
-    });
+    const minTokensToHire = Number.isFinite(Number(req.body.minTokensToHire)) 
+      ? Math.max(0, Number(req.body.minTokensToHire)) 
+      : 10;
+
+    let user = await User.findOne({ email: { $regex: new RegExp(`^${email.trim()}$`, "i") } });
+    if (user) {
+      user.name = name;
+      user.location = location;
+      user.githubProfileUrl = normalizedProfileUrl;
+      user.githubRepoUrl = normalizedRepoUrl || "";
+      user.skills = userSkills;
+      user.userLanguages = userLanguages;
+      user.projectNotes = projectNotes;
+      user.projectSummary = projectSummary;
+      user.profileStats = profileStats || null;
+      user.profileScore = Number.isFinite(Number(profileScore)) ? Number(profileScore) : 0;
+      user.difficultyScore = difficultyScore;
+      user.minTokensToHire = minTokensToHire;
+      await user.save();
+    } else {
+      user = await User.create({
+        name,
+        email: email.trim().toLowerCase(),
+        location,
+        githubProfileUrl: normalizedProfileUrl,
+        githubRepoUrl: normalizedRepoUrl || "",
+        skills: userSkills,
+        userLanguages,
+        projectNotes,
+        projectSummary,
+        profileStats: profileStats || null,
+        profileScore: Number.isFinite(Number(profileScore)) ? Number(profileScore) : 0,
+        difficultyScore,
+        minTokensToHire,
+      });
+    }
 
     if (normalizedRepoUrl) {
       const { owner, repo } = parseOwnerRepo(normalizedRepoUrl);
@@ -881,20 +903,35 @@ const matchUsers = async (req, res, next) => {
     const kw = String(keyword || "").trim();
     if (kw) {
       const rx = new RegExp(escapeRegex(kw), "i");
+      
       const collabs = await Project.find({
         source: "collab",
         $or: [{ name: rx }, { description: rx }, { keywords: rx }],
       })
         .select("userId helpers.userId")
         .lean();
-      const allowed = new Set();
+        
+      const allowedCollabUserIds = new Set();
       for (const c of collabs) {
-        if (c.userId) allowed.add(String(c.userId));
+        if (c.userId) allowedCollabUserIds.add(String(c.userId));
         for (const h of c.helpers || []) {
-          if (h.userId) allowed.add(String(h.userId));
+          if (h.userId) allowedCollabUserIds.add(String(h.userId));
         }
       }
-      users = users.filter((u) => allowed.has(String(u._id)));
+
+      users = users.filter((u) => {
+        if (allowedCollabUserIds.has(String(u._id))) return true;
+
+        const stringifiedContext = JSON.stringify({
+          name: u.name,
+          skills: u.skills,
+          langs: u.userLanguages,
+          notes: u.projectNotes,
+          summary: u.projectSummary,
+        });
+
+        return rx.test(stringifiedContext);
+      });
     }
 
     if (!users.length) {
@@ -1048,6 +1085,7 @@ Output: STRICT JSON array only. No markdown. Each item:
         email: u?.email || r.email,
         totalDifficulty: Number(u?.totalDifficulty) || 0,
         profileScore: Number(u?.profileScore) || 0,
+        minTokensToHire: u?.minTokensToHire ?? 10,
       };
     });
 
@@ -1084,18 +1122,49 @@ const getLeaderboard = async (req, res, next) => {
     const rows = await User.find({})
       .sort({ profileScore: -1, totalDifficulty: -1, updatedAt: -1 })
       .limit(limit)
-      .select("name email location profileScore totalDifficulty projectCount")
+      .select("name email location profileScore totalDifficulty projectCount tokens highestRankReached")
       .lean();
 
-    const leaderboard = rows.map((u, index) => ({
-      rank: index + 1,
-      name: u.name,
-      email: u.email,
-      location: u.location,
-      profileScore: Number.isFinite(u.profileScore) ? u.profileScore : 0,
-      totalDifficulty: Number.isFinite(u.totalDifficulty) ? u.totalDifficulty : 0,
-      projectCount: u.projectCount ?? 0,
-    }));
+    const updates = [];
+
+    const leaderboard = rows.map((u, index) => {
+      const rank = index + 1;
+      let newTokens = 0;
+      const prevHighest = u.highestRankReached || 1000000;
+
+      if (rank < prevHighest) {
+        if (prevHighest === 1000000) {
+          newTokens = Math.max(10, 500 - rank * 10);
+        } else {
+          newTokens = (prevHighest - rank) * 20;
+        }
+
+        updates.push(
+          User.updateOne(
+            { _id: u._id },
+            {
+              $inc: { tokens: newTokens },
+              $set: { highestRankReached: rank },
+            }
+          )
+        );
+      }
+
+      return {
+        rank,
+        name: u.name,
+        email: u.email,
+        location: u.location,
+        profileScore: Number.isFinite(u.profileScore) ? u.profileScore : 0,
+        totalDifficulty: Number.isFinite(u.totalDifficulty) ? u.totalDifficulty : 0,
+        projectCount: u.projectCount ?? 0,
+        tokens: (u.tokens || 0) + newTokens,
+      };
+    });
+
+    if (updates.length > 0) {
+      await Promise.all(updates);
+    }
 
     return res.status(200).json({
       success: true,
@@ -1313,6 +1382,92 @@ const submitProject = async (req, res, next) => {
     return next(error);
   }
 };
+const payTokensToUser = async (req, res, next) => {
+  try {
+    const { senderEmail, recipientEmail, amount } = req.body;
+
+    if (!senderEmail || !recipientEmail || amount === undefined) {
+      return res.status(400).json({ success: false, message: "Missing required fields." });
+    }
+
+    const payAmount = Math.floor(Number(amount));
+    if (payAmount <= 0) {
+      return res.status(400).json({ success: false, message: "Amount must be a positive integer." });
+    }
+
+    const sender = await User.findOne({ email: { $regex: new RegExp(`^${String(senderEmail).trim()}$`, "i") } });
+    if (!sender) {
+      return res.status(404).json({ success: false, message: "Your sender profile was not found in the database. Please click Profile and re-register." });
+    }
+
+    const recipient = await User.findOne({ email: { $regex: new RegExp(`^${String(recipientEmail).trim()}$`, "i") } });
+    if (!recipient) {
+      return res.status(404).json({ success: false, message: "Recipient user could not be found in the system." });
+    }
+
+    if (String(sender._id) === String(recipient._id)) {
+      return res.status(400).json({ success: false, message: "Cannot pay yourself." });
+    }
+
+    const minRequired = recipient.minTokensToHire ?? 10;
+    if (payAmount < minRequired) {
+      return res.status(400).json({ success: false, message: `The recipient requires a minimum of ${minRequired} tokens to be hired.` });
+    }
+
+    if ((sender.tokens || 0) < payAmount) {
+      return res.status(400).json({ success: false, message: "Insufficient tokens." });
+    }
+
+    await User.updateOne({ _id: sender._id }, { $inc: { tokens: -payAmount } });
+    await User.updateOne({ _id: recipient._id }, { $inc: { tokens: payAmount } });
+
+    return res.status(200).json({
+      success: true,
+      message: `Successfully paid ${payAmount} tokens.`,
+      senderTokens: sender.tokens - payAmount
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const updateProfile = async (req, res, next) => {
+  try {
+    const { email, name, location, username, profilePicture, minTokensToHire } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Email is required." });
+    }
+    
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+
+    if (name) user.name = name;
+    if (location) user.location = location;
+    
+    if (username !== undefined) {
+      user.projectSummary = user.projectSummary || {};
+      user.projectSummary.username = username;
+      user.markModified("projectSummary");
+    }
+    
+    if (profilePicture !== undefined) {
+      user.projectSummary = user.projectSummary || {};
+      user.projectSummary.profilePicture = profilePicture || null;
+      user.markModified("projectSummary");
+    }
+    
+    if (Number.isFinite(Number(minTokensToHire))) {
+      user.minTokensToHire = Math.max(0, Number(minTokensToHire));
+    }
+
+    await user.save();
+    res.json({ success: true, message: "Profile updated.", user });
+  } catch (err) {
+    next(err);
+  }
+};
 
 module.exports = {
   registerUser,
@@ -1322,4 +1477,6 @@ module.exports = {
   submitProject,
   createCollabProject,
   offerHelpOnCollabProject,
+  payTokensToUser,
+  updateProfile,
 };

@@ -86,6 +86,15 @@ const userSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    highestRankReached: {
+      type: Number,
+      default: 1000000,
+    },
+    minTokensToHire: {
+      type: Number,
+      default: 10,
+      min: 0,
+    },
   },
   { timestamps: true },
 );

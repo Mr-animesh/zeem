@@ -11,6 +11,8 @@ const {
   submitProject,
   createCollabProject,
   offerHelpOnCollabProject,
+  payTokensToUser,
+  updateProfile,
 } = require("./controllers/matchController");
 
 const app = express();
@@ -27,12 +29,14 @@ app.get("/api/health", (req, res) => {
 });
 
 app.post("/api/users/register", registerUser);
+app.put("/api/users/update", updateProfile);
 app.post("/api/match", matchUsers);
 app.get("/api/leaderboard", getLeaderboard);
 app.get("/api/projects/search", searchProjects);
 app.post("/api/projects/submit", submitProject);
 app.post("/api/collab-projects", createCollabProject);
 app.post("/api/collab-projects/:id/help", offerHelpOnCollabProject);
+app.post("/api/users/pay", payTokensToUser);
 
 app.use((err, req, res, next) => {
   console.error(err);

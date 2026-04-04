@@ -25,8 +25,10 @@ function RecruiterApp() {
     email: '',
     location: '',
     githubProfileUrl: '',
-    profilePicture: ''
+    profilePicture: '',
+    minTokensToHire: 10
   })
+
   const [registerForm, setRegisterForm] = useState({
     name: '',
     username: '',
@@ -34,10 +36,9 @@ function RecruiterApp() {
     location: '',
     githubProfileUrl: '',
     skillInput: '',
-    platformInput: '',
     skills: [],
-    platforms: [],
-    profilePicUrl: ''
+    profilePicUrl: '',
+    minTokensToHire: 10
   })
 
   const [matchForm, setMatchForm] = useState({
@@ -68,12 +69,15 @@ function RecruiterApp() {
   })
   const [createdProjects, setCreatedProjects] = useState([])
   const [collaboratorSearch, setCollaboratorSearch] = useState('')
-
   const [registerMessage, setRegisterMessage] = useState('')
   const [results, setResults] = useState([])
   const [hasRunMatch, setHasRunMatch] = useState(false)
+  const [showPayModal, setShowPayModal] = useState(false)
+  const [payAmounts, setPayAmounts] = useState({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [payingInProgress, setPayingInProgress] = useState(null)
+  const [payTokenAmount, setPayTokenAmount] = useState(10)
 
   useEffect(() => {
     fetch(`${apiBase}/api/leaderboard?limit=15`)
@@ -134,7 +138,8 @@ function RecruiterApp() {
       username: currentProfile?.username || '',
       email: currentProfile?.email || '',
       location: currentProfile?.location || '',
-      profilePicture: currentProfile?.profilePicture || ''
+      profilePicture: currentProfile?.profilePicture || '',
+      minTokensToHire: currentProfile?.minTokensToHire ?? 10
     })
   }, [currentProfile])
 
@@ -179,10 +184,9 @@ function RecruiterApp() {
       location: '',
       githubProfileUrl: '',
       skillInput: '',
-      platformInput: '',
       skills: [],
-      platforms: [],
-      profilePicUrl: ''
+      profilePicUrl: '',
+      minTokensToHire: 10
     })
   }
 
@@ -190,7 +194,6 @@ function RecruiterApp() {
     e.preventDefault()
     setError('')
     setRegisterMessage('')
-
     if (!registerForm.skills.length) {
       setError('Add at least one skill.')
       return
@@ -204,9 +207,9 @@ function RecruiterApp() {
       projectSummary: {
         username: registerForm.username.trim(),
         skills: registerForm.skills,
-        platforms: registerForm.platforms,
         profilePicture: registerForm.profilePicUrl.trim() || null
-      }
+      },
+      minTokensToHire: Number.isFinite(Number(registerForm.minTokensToHire)) ? Math.max(0, Number(registerForm.minTokensToHire)) : 10
     }
 
     try {
@@ -215,14 +218,11 @@ function RecruiterApp() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
-
       const data = await response.json().catch(() => ({}))
-
       if (!response.ok) {
         setError(data.message || 'Failed to save profile.')
         return
       }
-
       setRegisterMessage(
         `Profile saved for ${data.user?.name || payload.name} successfully.`
       )
@@ -241,7 +241,6 @@ function RecruiterApp() {
       setCurrentProfile(savedProfile)
       window.localStorage.setItem(PROFILE_DATA_KEY, JSON.stringify(savedProfile))
       resetRegisterForm()
-
       fetch(`${apiBase}/api/leaderboard?limit=15`)
         .then((r) => r.json())
         .then((lb) => {
@@ -261,7 +260,6 @@ function RecruiterApp() {
     setLoading(true)
     setError('')
     setResults([])
-
     try {
       const composedMission = [
         matchForm.missionDescription,
@@ -270,26 +268,21 @@ function RecruiterApp() {
       ]
         .filter(Boolean)
         .join(' ')
-
       const payload = {
         targetLocation: matchForm.targetLocation,
         missionDescription: composedMission,
         ...(matchForm.keyword.trim() && { keyword: matchForm.keyword.trim() })
       }
-
       const response = await fetch(`${apiBase}/api/match`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
-
       const data = await response.json().catch(() => ({}))
-
       if (!response.ok) {
         setError(data.message || 'Matching failed.')
         return
       }
-
       setResults(data.results || [])
     } catch {
       setError('Could not connect to backend.')
@@ -323,7 +316,6 @@ function RecruiterApp() {
     if (registerStep === 2 && !emailIsValid) return 'Enter a valid email.'
     if (registerStep === 3 && !registerForm.location.trim()) return 'Location is required.'
     if (registerStep === 4 && !registerForm.skills.length) return 'Add at least one skill.'
-    if (registerStep === 5 && !registerForm.platforms.length) return 'Add at least one platform.'
     return ''
   }
 
@@ -346,6 +338,43 @@ function RecruiterApp() {
     setError('')
     resetRegisterForm()
     setShowRegisterModal(true)
+  }
+
+  const handlePayTokens = async (recipientEmail) => {
+    setError('')
+    if (!currentProfile) {
+      setError('You must be registered to send tokens.')
+      return
+    }
+    setPayingInProgress(recipientEmail)
+    try {
+      const response = await fetch(`${apiBase}/api/users/pay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          senderEmail: currentProfile.email,
+          recipientEmail,
+          amount: payAmounts[recipientEmail] || 10
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(data.message || 'Payment failed.');
+      } else {
+        fetch(`${apiBase}/api/leaderboard?limit=15`)
+          .then((r) => r.json())
+          .then((lb) => {
+            if (lb.success && Array.isArray(lb.leaderboard)) {
+              setLeaderboard(lb.leaderboard)
+            }
+          })
+          .catch(() => {})
+      }
+    } catch {
+      setError('Could not connect to backend.')
+    } finally {
+      setPayingInProgress('')
+    }
   }
 
   const filteredProjects = createdProjects.filter((project) => {
@@ -561,7 +590,7 @@ function RecruiterApp() {
     }
   }
 
-  const saveProfileEdits = (e) => {
+  const saveProfileEdits = async (e) => {
     e.preventDefault()
     if (!profileForm.name.trim()) {
       setError('Name is required.')
@@ -577,12 +606,30 @@ function RecruiterApp() {
       username: profileForm.username.trim(),
       email: profileForm.email.trim(),
       location: profileForm.location.trim(),
-      profilePicture: profileForm.profilePicture.trim()
+      profilePicture: profileForm.profilePicture.trim(),
+      minTokensToHire: Number.isFinite(Number(profileForm.minTokensToHire)) ? Math.max(0, Number(profileForm.minTokensToHire)) : 10
     }
 
-    setCurrentProfile(updatedProfile)
+    try {
+      const resp = await fetch(`${apiBase}/api/users/update`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedProfile)
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        setError(data.message || 'Failed to update profile via API.');
+        return;
+      }
+    } catch {
+      // Allow fallback if backend unreachable
+    }
+
+    // Merge backend token/rank updates if they exist (though minTokensToHire is what we just updated)
+    setCurrentProfile(prev => ({ ...prev, ...updatedProfile }))
     window.localStorage.setItem(REGISTERED_PROFILE_KEY, 'true')
-    window.localStorage.setItem(PROFILE_DATA_KEY, JSON.stringify(updatedProfile))
+    window.localStorage.setItem(PROFILE_DATA_KEY, JSON.stringify({ ...currentProfile, ...updatedProfile }))
+    
     setRegisterMessage('Profile updated successfully.')
     setError('')
   }
@@ -774,6 +821,18 @@ function RecruiterApp() {
                 placeholder="Location"
                 required
               />
+              <div className="flex flex-col">
+                <input
+                  type="number"
+                  name="minTokensToHire"
+                  min="0"
+                  value={profileForm.minTokensToHire}
+                  onChange={(e) => setProfileForm(prev => ({ ...prev, minTokensToHire: Math.max(0, Number(e.target.value)) }))}
+                  className="w-full rounded border border-outline-variant/30 bg-background px-3 py-2 text-sm text-white placeholder:text-white/40"
+                  placeholder="Min Tokens to Hire"
+                />
+                <span className="text-[10px] text-white/50 px-1 mt-1 uppercase">Minimum tokens needed to hire you</span>
+              </div>
             </div>
 
             <input
@@ -828,10 +887,11 @@ function RecruiterApp() {
                 className="mt-3 flex items-center justify-between rounded-lg border border-outline-variant/20 bg-background/40 px-4 py-3"
               >
                 <div className="flex flex-col">
-                  <span className="text-white">{u.name}</span>
+                  <span className="text-white font-bold">{u.name}</span>
                   {u.location && (
                     <span className="text-xs text-white/60">{u.location}</span>
                   )}
+                  <span className="mt-1 text-xs text-primary-container font-black">{u.tokens || 0} Tokens Vault</span>
                 </div>
                 <div className="text-right">
                   <span className="block text-xs uppercase tracking-wide text-white/60">
@@ -1254,6 +1314,30 @@ function RecruiterApp() {
                         <p className="mt-2 text-sm text-white/80">
                           {item.reasoning || 'No reasoning provided.'}
                         </p>
+                        {currentProfile?.email !== item.email && (
+                          <div className="mt-4 flex items-center gap-2 border-t border-outline-variant/20 pt-3">
+                            <div className="flex flex-col">
+                              <span className="text-[10px] uppercase text-white/50 mb-1">
+                                Min Cost: {item.minTokensToHire || 10} Tokens
+                              </span>
+                              <input
+                                type="number"
+                                min={item.minTokensToHire || 10}
+                                value={payAmounts[item.email] ?? (item.minTokensToHire || 10)}
+                                onChange={(e) => setPayAmounts(prev => ({ ...prev, [item.email]: Number(e.target.value) || 0 }))}
+                                className="w-20 rounded border border-outline-variant/30 bg-background px-2 py-1 text-sm text-white"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              className="mt-4 rounded bg-primary-container px-3 py-1 text-xs font-bold uppercase tracking-wide text-on-primary hover:bg-primary disabled:opacity-50"
+                              onClick={() => handlePayTokens(item.email)}
+                              disabled={payingInProgress === item.email || (payAmounts[item.email] ?? (item.minTokensToHire || 10)) < (item.minTokensToHire || 10)}
+                            >
+                              {payingInProgress === item.email ? "Paying..." : "Hire & Pay Tokens"}
+                            </button>
+                          </div>
+                        )}
                       </article>
                     ))}
                   </div>
@@ -1367,6 +1451,30 @@ function RecruiterApp() {
                       <p className="mt-2 text-sm text-white/80">
                         {item.reasoning || 'No reasoning provided.'}
                       </p>
+                      {currentProfile?.email !== item.email && (
+                        <div className="mt-4 flex items-center gap-2 border-t border-outline-variant/20 pt-3">
+                          <div className="flex flex-col">
+                            <span className="text-[10px] uppercase text-white/50 mb-1">
+                              Min Cost: {item.minTokensToHire || 10} Tokens
+                            </span>
+                            <input
+                              type="number"
+                              min={item.minTokensToHire || 10}
+                              value={payAmounts[item.email] ?? (item.minTokensToHire || 10)}
+                              onChange={(e) => setPayAmounts(prev => ({ ...prev, [item.email]: Number(e.target.value) || 0 }))}
+                              className="w-20 rounded border border-outline-variant/30 bg-background px-2 py-1 text-sm text-white"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            className="mt-4 rounded bg-primary-container px-3 py-1 text-xs font-bold uppercase tracking-wide text-on-primary hover:bg-primary disabled:opacity-50"
+                            onClick={() => handlePayTokens(item.email)}
+                            disabled={payingInProgress === item.email || (payAmounts[item.email] ?? (item.minTokensToHire || 10)) < (item.minTokensToHire || 10)}
+                          >
+                            {payingInProgress === item.email ? "Paying..." : "Hire & Pay Tokens"}
+                          </button>
+                        </div>
+                      )}
                     </article>
                   ))}
                 </div>
@@ -1521,47 +1629,6 @@ function RecruiterApp() {
 
               {registerStep === 5 && (
                 <div className="rounded-xl border border-outline-variant/20 bg-background/40 p-4">
-                  <label className="mb-2 block text-sm font-medium text-white/90">Platforms (multiple)</label>
-                  <div className="flex gap-2">
-                    <input
-                      name="platformInput"
-                      value={registerForm.platformInput}
-                      onChange={onRegisterFieldChange}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          addListItem('platforms', 'platformInput')
-                        }
-                      }}
-                      className="w-full rounded border border-outline-variant/30 bg-background px-3 py-2 text-sm text-white placeholder:text-white/40"
-                      placeholder="Add platform and press Enter"
-                    />
-                    <button
-                      type="button"
-                      className="rounded bg-primary-container px-3 py-2 font-bold text-on-primary"
-                      onClick={() => addListItem('platforms', 'platformInput')}
-                    >
-                      Add
-                    </button>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {registerForm.platforms.map((platform) => (
-                      <button
-                        key={platform}
-                        type="button"
-                        className="rounded-full bg-primary-container/20 px-3 py-1 text-xs text-primary-container"
-                        onClick={() => removeListItem('platforms', platform)}
-                        title="Remove"
-                      >
-                        {platform} x
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {registerStep === 6 && (
-                <div className="rounded-xl border border-outline-variant/20 bg-background/40 p-4">
                   <label className="mb-2 block text-sm font-medium text-white/90">
                     Profile Picture (optional)
                   </label>
@@ -1592,6 +1659,31 @@ function RecruiterApp() {
                 </div>
               )}
 
+              {registerStep === 6 && (
+                <div className="rounded-xl border border-outline-variant/20 bg-background/40 p-4">
+                  <h4 className="mb-2 font-headline font-bold uppercase tracking-wide text-primary-container">
+                    Hiring Terms
+                  </h4>
+                  <label className="mb-2 block text-sm font-medium text-white/90">
+                    Minimum Tokens required for recruiters to hire you:
+                  </label>
+                  <p className="text-xs text-white/70 mb-3">
+                    If someone finds you via a match and wants to collaborate, they will be required to send at least this many tokens directly to your wallet to establish contact.
+                  </p>
+                  <input
+                    type="number"
+                    name="minTokensToHire"
+                    min="0"
+                    placeholder="e.g. 10"
+                    value={registerForm.minTokensToHire}
+                    onChange={(e) => setRegisterForm(prev => ({ ...prev, minTokensToHire: Math.max(0, Number(e.target.value)) }))}
+                    className="w-full rounded border border-outline-variant/30 bg-background px-3 py-2 text-sm text-white placeholder:text-white/40"
+                  />
+                  <p className="mt-2 text-xs text-primary-container font-black uppercase">
+                    Your threshold: {registerForm.minTokensToHire} Tokens
+                  </p>
+                </div>
+              )}
               <div className="flex items-center justify-between gap-2">
                 <div>
                   {registerStep > 0 && (
